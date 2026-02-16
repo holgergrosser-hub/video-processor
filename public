@@ -1,0 +1,17 @@
+mkdir -p public
+cat > public/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Processor API</title>
+</head>
+<body>
+    <h1>Video Processor API läuft!</h1>
+    <p>Endpoint: <code>/.netlify/functions/process-video</code></p>
+</body>
+</html>
+EOF
+
+git add public/
+git commit -m "Add public directory"
+git push
