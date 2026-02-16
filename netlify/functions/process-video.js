@@ -1,5 +1,5 @@
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+const ffmpegPath = require('ffmpeg-static');
 const speech = require('@google-cloud/speech');
 const { Storage } = require('@google-cloud/storage');
 const fs = require('fs');
