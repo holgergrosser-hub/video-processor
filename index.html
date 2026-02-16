@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Prozessor - Test Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        #status {
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        #status.loading {
+            display: block;
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        #status.success {
+            display: block;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        #status.error {
+            display: block;
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        #results {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .screenshot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+        
+        .screenshot-item {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .screenshot-item img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .screenshot-info {
+            padding: 8px;
+            background: #f5f5f5;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .transcript-section {
+            margin-top: 20px;
+            padding: 16px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        
+        .transcript-section h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .transcript-text {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 Video Prozessor</h1>
+        <p class="subtitle">Automatische Prozessdokumentation aus Screen-Recordings</p>
+        
+        <form id="videoForm">
+            <div class="form-group">
+                <label for="videoUrl">Video URL (Google Drive Download Link)</label>
+                <input 
+                    type="url" 
+                    id="videoUrl" 
+                    placeholder="https://drive.google.com/uc?export=download&id=..."
+                    required
+                />
+                <small style="color: #666; font-size: 12px;">
+                    Tipp: In Google Drive → Rechtsklick → Link abrufen → Zugriff ändern zu "Jeder mit dem Link"
+                </small>
+            </div>
+            
+            <div class="form-group">
+                <label for="fileId">Datei-ID (optional)</label>
+                <input 
+                    type="text" 
+                    id="fileId" 
+                    placeholder="1ABCdef123..."
+                />
+            </div>
+            
+            <div class="form-group">
+                <label for="sensitivity">Empfindlichkeit für Szenenwechsel</label>
+                <select id="sensitivity">
+                    <option value="0.1">Sehr hoch (viele Screenshots)</option>
+                    <option value="0.15" selected>Mittel (empfohlen)</option>
+                    <option value="0.2">Niedrig (weniger Screenshots)</option>
+                    <option value="0.3">Sehr niedrig</option>
+                </select>
+            </div>
+            
+            <button type="submit" id="submitBtn">
+                Video verarbeiten
+            </button>
+        </form>
+        
+        <div id="status"></div>
+        
+        <div id="results">
+            <h2>Ergebnisse</h2>
+            
+            <div class="transcript-section" id="transcriptSection" style="display:none;">
+                <h3>Transkript</h3>
+                <div class="transcript-text" id="transcriptText"></div>
+            </div>
+            
+            <h3 style="margin-top: 20px;">Screenshots ({{ count }})</h3>
+            <div class="screenshot-grid" id="screenshotGrid"></div>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('videoForm');
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const videoUrl = document.getElementById('videoUrl').value;
+            const fileId = document.getElementById('fileId').value || 'test-' + Date.now();
+            const sensitivity = parseFloat(document.getElementById('sensitivity').value);
+            
+            // Status anzeigen
+            statusDiv.className = 'loading';
+            statusDiv.textContent = '⏳ Video wird verarbeitet... Dies kann einige Minuten dauern.';
+            resultsDiv.style.display = 'none';
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/.netlify/functions/process-video', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        videoUrl,
+                        driveFileId: fileId,
+                        sensitivity
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.error || 'Unbekannter Fehler');
+                }
+                
+                // Erfolg
+                statusDiv.className = 'success';
+                statusDiv.textContent = `✅ Fertig! ${result.totalScreenshots} Screenshots extrahiert.`;
+                
+                // Ergebnisse anzeigen
+                displayResults(result);
+                
+            } catch (error) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = `❌ Fehler: ${error.message}`;
+                console.error('Fehler:', error);
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+        
+        function displayResults(result) {
+            resultsDiv.style.display = 'block';
+            
+            // Transkript
+            if (result.transcript && result.transcript.fullText) {
+                document.getElementById('transcriptSection').style.display = 'block';
+                document.getElementById('transcriptText').textContent = result.transcript.fullText;
+            }
+            
+            // Screenshots
+            const grid = document.getElementById('screenshotGrid');
+            grid.innerHTML = '';
+            
+            result.screenshots.forEach((screenshot, index) => {
+                const item = document.createElement('div');
+                item.className = 'screenshot-item';
+                
+                const img = document.createElement('img');
+                img.src = `data:image/png;base64,${screenshot.base64}`;
+                img.alt = `Screenshot ${index + 1}`;
+                
+                const info = document.createElement('div');
+                info.className = 'screenshot-info';
+                info.textContent = `#${index + 1} - Frame ${screenshot.timestamp}`;
+                
+                item.appendChild(img);
+                item.appendChild(info);
+                grid.appendChild(item);
+            });
+            
+            // Count updaten
+            resultsDiv.querySelector('h3').textContent = `Screenshots (${result.totalScreenshots})`;
+        }
+    </script>
+</body>
+</html>

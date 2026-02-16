@@ -1,0 +1,15 @@
+[build]
+  command = "npm install && npm run build"
+  functions = "netlify/functions"
+  publish = "public"
+
+[functions]
+  node_bundler = "esbuild"
+  
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Environment Variables (in Netlify UI setzen):
+# GOOGLE_APPLICATION_CREDENTIALS_JSON = { dein Google Cloud Service Account JSON }

@@ -1,0 +1,23 @@
+{
+  "name": "audit-video-processor",
+  "version": "1.0.0",
+  "description": "Automatische Prozessdokumentation aus Screen-Recording Videos",
+  "main": "index.js",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo 'No build needed'",
+    "deploy": "netlify deploy --prod"
+  },
+  "keywords": ["video", "screenshots", "transcription", "audit"],
+  "author": "Holger Grosser",
+  "license": "MIT",
+  "dependencies": {
+    "fluent-ffmpeg": "^2.1.2",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@google-cloud/speech": "^6.0.0",
+    "@google-cloud/storage": "^7.7.0"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}
