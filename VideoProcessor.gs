@@ -192,7 +192,7 @@ function callVideoProcessor(videoUrl, fileId) {
   const startedAt = new Date().getTime();
   const maxWaitMs = 20 * 60 * 1000; // 20 Minuten (Netlify Background hat typ. genug Laufzeit)
   let lastStage = '';
-  const notFoundGraceMs = 60 * 1000; // 60s: Blob-Eintrag kann minimal verzögert erscheinen
+  const notFoundGraceMs = 5 * 60 * 1000; // 5 Min: Cold start/Blob-Propagation kann länger dauern
 
   while (new Date().getTime() - startedAt < maxWaitMs) {
     const pollResponse = UrlFetchApp.fetch(resultUrl + '?jobId=' + encodeURIComponent(jobId), {

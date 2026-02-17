@@ -69,6 +69,17 @@ exports.handler = (event, context, callback) => {
       connectLambda(event);
       const store = getStore('video-processor-jobs');
 
+      // Write an initial job record as early as possible.
+      // Cold starts can make heavy requires slow; without this, polling can hit 404.
+      await store.setJSON(jobId, {
+        status: 'processing',
+        stage: 'init',
+        jobId,
+        driveFileId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
       const fs = require('fs');
       const path = require('path');
 
@@ -85,14 +96,6 @@ exports.handler = (event, context, callback) => {
       }
 
       ffmpeg.setFfmpegPath(resolvedFfmpegPath);
-
-      await store.setJSON(jobId, {
-        status: 'processing',
-        stage: 'init',
-        jobId,
-        driveFileId,
-        createdAt: new Date().toISOString()
-      });
 
       console.log('Background job started:', jobId);
 
