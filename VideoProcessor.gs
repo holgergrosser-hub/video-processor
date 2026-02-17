@@ -190,7 +190,8 @@ function callVideoProcessor(videoUrl, fileId) {
   Logger.log('⏳ Warte auf Ergebnis... Job: ' + jobId);
 
   const startedAt = new Date().getTime();
-  const maxWaitMs = 8 * 60 * 1000; // 8 Minuten (Apps Script kann limitiert sein)
+  const maxWaitMs = 20 * 60 * 1000; // 20 Minuten (Netlify Background hat typ. genug Laufzeit)
+  let lastStage = '';
 
   while (new Date().getTime() - startedAt < maxWaitMs) {
     const pollResponse = UrlFetchApp.fetch(resultUrl + '?jobId=' + encodeURIComponent(jobId), {
@@ -204,7 +205,18 @@ function callVideoProcessor(videoUrl, fileId) {
     }
 
     if (pollCode === 202) {
-      Utilities.sleep(5000);
+      try {
+        const pollBody = JSON.parse(pollResponse.getContentText());
+        const stage = pollBody.stage || '';
+        if (stage && stage !== lastStage) {
+          lastStage = stage;
+          Logger.log('⏳ Status: ' + (pollBody.status || 'processing') + ' | Stage: ' + stage);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      Utilities.sleep(10000);
       continue;
     }
 

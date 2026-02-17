@@ -65,6 +65,9 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       success: false,
       status: job.status,
+      stage: job.stage,
+      updatedAt: job.updatedAt,
+      meta: job.meta,
       jobId
     })
   };

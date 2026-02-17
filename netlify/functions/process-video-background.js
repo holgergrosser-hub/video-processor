@@ -88,12 +88,21 @@ exports.handler = (event, context, callback) => {
 
       await store.setJSON(jobId, {
         status: 'processing',
+        stage: 'init',
         jobId,
         driveFileId,
         createdAt: new Date().toISOString()
       });
 
       console.log('Background job started:', jobId);
+
+      await store.setJSON(jobId, {
+        status: 'processing',
+        stage: 'download',
+        jobId,
+        driveFileId,
+        updatedAt: new Date().toISOString()
+      });
 
       const tempDir = '/tmp';
       const videoPath = path.join(tempDir, `${jobId}.mp4`);
@@ -105,9 +114,47 @@ exports.handler = (event, context, callback) => {
       }
 
       await downloadVideo(videoUrl, videoPath, { fs, Readable: require('stream').Readable });
+
+      await store.setJSON(jobId, {
+        status: 'processing',
+        stage: 'screenshots',
+        jobId,
+        driveFileId,
+        updatedAt: new Date().toISOString()
+      });
+
       const screenshots = await extractScreenshots(ffmpeg, videoPath, screenshotsDir, sensitivity, { fs, path });
+
+      await store.setJSON(jobId, {
+        status: 'processing',
+        stage: 'audio',
+        jobId,
+        driveFileId,
+        updatedAt: new Date().toISOString(),
+        meta: { screenshots: screenshots.length }
+      });
+
       await extractAudio(ffmpeg, videoPath, audioPath);
+
+      await store.setJSON(jobId, {
+        status: 'processing',
+        stage: 'transcribe',
+        jobId,
+        driveFileId,
+        updatedAt: new Date().toISOString(),
+        meta: { screenshots: screenshots.length }
+      });
+
       const transcript = await transcribeAudio(audioPath, { fs });
+
+      await store.setJSON(jobId, {
+        status: 'processing',
+        stage: 'encode',
+        jobId,
+        driveFileId,
+        updatedAt: new Date().toISOString(),
+        meta: { screenshots: screenshots.length }
+      });
 
       const screenshotData = screenshots.map(file => {
         const filePath = path.join(screenshotsDir, file);
@@ -129,6 +176,7 @@ exports.handler = (event, context, callback) => {
 
       await store.setJSON(jobId, {
         status: 'done',
+        stage: 'done',
         jobId,
         driveFileId,
         completedAt: new Date().toISOString(),
