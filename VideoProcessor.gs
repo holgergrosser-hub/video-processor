@@ -192,6 +192,7 @@ function callVideoProcessor(videoUrl, fileId) {
   const startedAt = new Date().getTime();
   const maxWaitMs = 20 * 60 * 1000; // 20 Minuten (Netlify Background hat typ. genug Laufzeit)
   let lastStage = '';
+  const notFoundGraceMs = 60 * 1000; // 60s: Blob-Eintrag kann minimal verzögert erscheinen
 
   while (new Date().getTime() - startedAt < maxWaitMs) {
     const pollResponse = UrlFetchApp.fetch(resultUrl + '?jobId=' + encodeURIComponent(jobId), {
@@ -202,6 +203,17 @@ function callVideoProcessor(videoUrl, fileId) {
     const pollCode = pollResponse.getResponseCode();
     if (pollCode === 200) {
       return JSON.parse(pollResponse.getContentText());
+    }
+
+    if (pollCode === 404) {
+      // Direkt nach Job-Start kann der Blob-Eintrag noch nicht sichtbar sein.
+      // In dieser Grace-Phase behandeln wir 404 wie "noch nicht bereit".
+      if (new Date().getTime() - startedAt < notFoundGraceMs) {
+        Utilities.sleep(2000);
+        continue;
+      }
+
+      throw new Error('HTTP 404: ' + pollResponse.getContentText());
     }
 
     if (pollCode === 202) {
