@@ -112,21 +112,47 @@ exports.handler = async (event, context) => {
 
 // Video herunterladen
 async function downloadVideo(url, outputPath) {
-  const https = require('https');
-  const file = fs.createWriteStream(outputPath);
+  const { pipeline } = require('stream/promises');
 
-  return new Promise((resolve, reject) => {
-    https.get(url, (response) => {
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve();
-      });
-    }).on('error', (err) => {
-      fs.unlink(outputPath, () => {});
-      reject(err);
-    });
+  // Prefer fetch because it follows redirects (Google Drive often returns 302)
+  // and gives us access to headers for validation.
+  const response = await fetch(url, {
+    redirect: 'follow',
+    headers: {
+      // Some endpoints behave differently without a UA.
+      'user-agent': 'video-processor/1.0'
+    }
   });
+
+  if (!response.ok) {
+    throw new Error(`Video download failed: HTTP ${response.status}`);
+  }
+
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  const contentLengthHeader = response.headers.get('content-length');
+  const contentLength = contentLengthHeader ? Number(contentLengthHeader) : undefined;
+
+  if (contentType.includes('text/html')) {
+    // Google Drive sometimes returns an HTML confirmation/redirect page.
+    const bodyPreview = (await response.text()).slice(0, 400);
+    throw new Error(
+      'Downloaded content is HTML, not a video file. ' +
+      'This usually means the Google Drive link is not a direct download (redirect/confirmation required). ' +
+      `Content-Type=${contentType}. Preview=${JSON.stringify(bodyPreview)}`
+    );
+  }
+
+  if (!response.body) {
+    throw new Error('Video download failed: empty response body');
+  }
+
+  const file = fs.createWriteStream(outputPath);
+  await pipeline(Readable.fromWeb(response.body), file);
+
+  const stat = fs.statSync(outputPath);
+  if (!stat.size || stat.size < 1024) {
+    throw new Error(`Downloaded video file too small (${stat.size} bytes). contentType=${contentType} contentLength=${contentLength}`);
+  }
 }
 
 // Screenshots extrahieren bei Szenenwechseln
