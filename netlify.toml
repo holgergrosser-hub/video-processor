@@ -8,7 +8,7 @@
   # IMPORTANT: ffmpeg-static contains a native binary and relies on __dirname
   # to locate it. If esbuild bundles it into the function, __dirname becomes
   # the function directory and it will look for ./ffmpeg (ENOENT).
-  external_node_modules = ["ffmpeg-static", "fluent-ffmpeg"]
+  external_node_modules = ["ffmpeg-static", "fluent-ffmpeg", "@netlify/blobs"]
   included_files = ["node_modules/ffmpeg-static/**"]
   
 [[redirects]]
