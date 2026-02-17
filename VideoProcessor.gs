@@ -476,6 +476,45 @@ Video-Prozessor Error Handler
 // ============================================================================
 
 /**
+ * Quick-Test: verarbeitet automatisch das neueste Video
+ * im konfigurierten VIDEO_FOLDER_ID (kein Copy/Paste der File-ID nötig).
+ */
+function quickVideoTest() {
+  const VIDEO_FOLDER_ID = PropertiesService.getScriptProperties().getProperty('VIDEO_FOLDER_ID');
+  if (!VIDEO_FOLDER_ID) {
+    Logger.log('❌ VIDEO_FOLDER_ID nicht konfiguriert! Bitte setup() ausführen.');
+    return;
+  }
+
+  const folder = DriveApp.getFolderById(VIDEO_FOLDER_ID);
+  const files = folder.getFiles();
+
+  let newest = null;
+  let newestUpdated = 0;
+
+  while (files.hasNext()) {
+    const f = files.next();
+    const mt = (f.getMimeType() || '').toLowerCase();
+    if (!mt.includes('video')) continue;
+
+    const updatedMs = f.getLastUpdated().getTime();
+    if (updatedMs > newestUpdated) {
+      newestUpdated = updatedMs;
+      newest = f;
+    }
+  }
+
+  if (!newest) {
+    Logger.log('❌ Kein Video im VIDEO-Ordner gefunden.');
+    return;
+  }
+
+  Logger.log('🧪 QuickVideoTest: Neuestes Video: ' + newest.getName());
+  Logger.log('🧪 QuickVideoTest: File-ID: ' + newest.getId());
+  processNewVideo(newest.getId());
+}
+
+/**
  * Test mit existierendem Video
  * ANLEITUNG:
  * 1. Video in Google Drive hochladen
