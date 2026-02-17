@@ -41,7 +41,7 @@ exports.handler = (event, context, callback) => {
     });
   }
 
-  const { videoUrl, driveFileId, sensitivity = 0.15 } = parsedBody;
+  const { videoUrl, driveFileId, sensitivity = 0.15, jobId: clientJobId } = parsedBody;
 
   if (!videoUrl || !driveFileId) {
     return callback(null, {
@@ -51,7 +51,9 @@ exports.handler = (event, context, callback) => {
     });
   }
 
-  const jobId = `${driveFileId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const jobId = (clientJobId && typeof clientJobId === 'string' && clientJobId.length >= 8)
+    ? clientJobId
+    : `${driveFileId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   // Respond immediately (prevents 504 / inactivity timeouts)
   callback(null, {

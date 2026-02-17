@@ -157,10 +157,13 @@ function callVideoProcessor(videoUrl, fileId) {
     throw new Error('NETLIFY_FUNCTION_URL nicht konfiguriert! Bitte setup() ausführen.');
   }
   
+  const jobId = fileId + '-' + new Date().getTime();
+
   const startPayload = {
     videoUrl: videoUrl,
     driveFileId: fileId,
-    sensitivity: 0.15
+    sensitivity: 0.15,
+    jobId: jobId
   };
 
   const startOptions = {
@@ -180,11 +183,8 @@ function callVideoProcessor(videoUrl, fileId) {
     throw new Error('HTTP ' + startCode + ': ' + startResponse.getContentText());
   }
 
-  const startBody = JSON.parse(startResponse.getContentText());
-  const jobId = startBody.jobId;
-  if (!jobId) {
-    throw new Error('Kein jobId von Netlify erhalten: ' + startResponse.getContentText());
-  }
+  // Netlify Background Functions return an empty body for 202.
+  // We therefore generate the jobId client-side and pass it in the payload.
 
   const resultUrl = deriveResultUrl_(NETLIFY_FUNCTION_URL);
   Logger.log('⏳ Warte auf Ergebnis... Job: ' + jobId);
