@@ -25,8 +25,9 @@ function setup() {
   
   // 1. Deine Netlify Function URL
   // Nach Deployment findest du sie hier: https://app.netlify.com
-  // Format: https://DEINE-SITE.netlify.app/.netlify/functions/process-video
-  const NETLIFY_URL = 'https://video-processor-audit.netlify.app/.netlify/functions/process-video';
+  // Format: https://DEINE-SITE.netlify.app/.netlify/functions/process-video-background
+  // (Background Function: returns immediately, avoids 504 / inactivity timeout)
+  const NETLIFY_URL = 'https://video-processor-audit.netlify.app/.netlify/functions/process-video-background';
   
   // 2. Google Drive Ordner-ID für Video-Uploads
   // Erstelle einen Ordner in Google Drive, öffne ihn, kopiere ID aus URL
@@ -156,31 +157,77 @@ function callVideoProcessor(videoUrl, fileId) {
     throw new Error('NETLIFY_FUNCTION_URL nicht konfiguriert! Bitte setup() ausführen.');
   }
   
-  const payload = {
+  const startPayload = {
     videoUrl: videoUrl,
     driveFileId: fileId,
     sensitivity: 0.15
   };
-  
-  const options = {
+
+  const startOptions = {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify(payload),
+    payload: JSON.stringify(startPayload),
     muteHttpExceptions: true
   };
-  
-  Logger.log('⏳ Warte auf Netlify Response (kann 2-5 Min dauern)...');
-  
-  const response = UrlFetchApp.fetch(NETLIFY_FUNCTION_URL, options);
-  const responseCode = response.getResponseCode();
-  
-  Logger.log('📥 Response Code: ' + responseCode);
-  
-  if (responseCode !== 200) {
-    throw new Error('HTTP ' + responseCode + ': ' + response.getContentText());
+
+  Logger.log('🚀 Starte Background-Job (Netlify)...');
+
+  const startResponse = UrlFetchApp.fetch(NETLIFY_FUNCTION_URL, startOptions);
+  const startCode = startResponse.getResponseCode();
+  Logger.log('📥 Start Response Code: ' + startCode);
+
+  if (startCode !== 202 && startCode !== 200) {
+    throw new Error('HTTP ' + startCode + ': ' + startResponse.getContentText());
   }
-  
-  return JSON.parse(response.getContentText());
+
+  const startBody = JSON.parse(startResponse.getContentText());
+  const jobId = startBody.jobId;
+  if (!jobId) {
+    throw new Error('Kein jobId von Netlify erhalten: ' + startResponse.getContentText());
+  }
+
+  const resultUrl = deriveResultUrl_(NETLIFY_FUNCTION_URL);
+  Logger.log('⏳ Warte auf Ergebnis... Job: ' + jobId);
+
+  const startedAt = new Date().getTime();
+  const maxWaitMs = 8 * 60 * 1000; // 8 Minuten (Apps Script kann limitiert sein)
+
+  while (new Date().getTime() - startedAt < maxWaitMs) {
+    const pollResponse = UrlFetchApp.fetch(resultUrl + '?jobId=' + encodeURIComponent(jobId), {
+      method: 'get',
+      muteHttpExceptions: true
+    });
+
+    const pollCode = pollResponse.getResponseCode();
+    if (pollCode === 200) {
+      return JSON.parse(pollResponse.getContentText());
+    }
+
+    if (pollCode === 202) {
+      Utilities.sleep(5000);
+      continue;
+    }
+
+    throw new Error('HTTP ' + pollCode + ': ' + pollResponse.getContentText());
+  }
+
+  throw new Error('Timeout: Video-Verarbeitung dauert länger als ' + (maxWaitMs / 60000) + ' Minuten.');
+}
+
+/**
+ * Leitet aus der Background-Function-URL die Result-URL ab.
+ */
+function deriveResultUrl_(backgroundUrl) {
+  if (backgroundUrl.indexOf('process-video-background') !== -1) {
+    return backgroundUrl.replace('process-video-background', 'process-video-result');
+  }
+
+  // Fallback: wenn jemand noch process-video eingetragen hat
+  if (backgroundUrl.indexOf('process-video') !== -1) {
+    return backgroundUrl.replace('process-video', 'process-video-result');
+  }
+
+  throw new Error('Kann Result-URL nicht ableiten aus: ' + backgroundUrl);
 }
 
 /**
