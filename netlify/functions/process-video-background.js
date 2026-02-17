@@ -14,7 +14,8 @@ exports.handler = (event, context, callback) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json; charset=utf-8'
   };
 
   if (event.httpMethod === 'OPTIONS') {
@@ -61,35 +62,35 @@ exports.handler = (event, context, callback) => {
 
   // Continue processing in the background (Netlify background function)
   (async () => {
-    // Initialize Netlify Blobs after the response has been sent.
-    connectLambda(event);
-    const store = getStore('video-processor-jobs');
-
-    const fs = require('fs');
-    const path = require('path');
-
-    // Heavy dependencies are loaded lazily to keep cold start fast.
-    const ffmpeg = require('fluent-ffmpeg');
-    const ffmpegPath = require('ffmpeg-static');
-
-    const resolvedFfmpegPath = process.env.FFMPEG_PATH || ffmpegPath;
-    if (!resolvedFfmpegPath || !fs.existsSync(resolvedFfmpegPath)) {
-      console.error('FFmpeg binary not found. Resolved path:', resolvedFfmpegPath);
-      console.error('Tip: In Netlify, keep ffmpeg-static as external_node_modules so __dirname points to node_modules.');
-    } else {
-      console.log('Using ffmpeg binary at:', resolvedFfmpegPath);
-    }
-
-    ffmpeg.setFfmpegPath(resolvedFfmpegPath);
-
-    await store.setJSON(jobId, {
-      status: 'processing',
-      jobId,
-      driveFileId,
-      createdAt: new Date().toISOString()
-    });
-
     try {
+      // Initialize Netlify Blobs after the response has been sent.
+      connectLambda(event);
+      const store = getStore('video-processor-jobs');
+
+      const fs = require('fs');
+      const path = require('path');
+
+      // Heavy dependencies are loaded lazily to keep cold start fast.
+      const ffmpeg = require('fluent-ffmpeg');
+      const ffmpegPath = require('ffmpeg-static');
+
+      const resolvedFfmpegPath = process.env.FFMPEG_PATH || ffmpegPath;
+      if (!resolvedFfmpegPath || !fs.existsSync(resolvedFfmpegPath)) {
+        console.error('FFmpeg binary not found. Resolved path:', resolvedFfmpegPath);
+        console.error('Tip: In Netlify, keep ffmpeg-static as external_node_modules so __dirname points to node_modules.');
+      } else {
+        console.log('Using ffmpeg binary at:', resolvedFfmpegPath);
+      }
+
+      ffmpeg.setFfmpegPath(resolvedFfmpegPath);
+
+      await store.setJSON(jobId, {
+        status: 'processing',
+        jobId,
+        driveFileId,
+        createdAt: new Date().toISOString()
+      });
+
       console.log('Background job started:', jobId);
 
       const tempDir = '/tmp';
@@ -136,16 +137,22 @@ exports.handler = (event, context, callback) => {
       console.log('Background job finished:', jobId);
     } catch (error) {
       console.error('Background job failed:', jobId, error);
-      await store.setJSON(jobId, {
-        status: 'error',
-        jobId,
-        driveFileId,
-        failedAt: new Date().toISOString(),
-        error: {
-          message: error.message,
-          stack: error.stack
-        }
-      });
+      try {
+        connectLambda(event);
+        const store = getStore('video-processor-jobs');
+        await store.setJSON(jobId, {
+          status: 'error',
+          jobId,
+          driveFileId,
+          failedAt: new Date().toISOString(),
+          error: {
+            message: error.message,
+            stack: error.stack
+          }
+        });
+      } catch (storeError) {
+        console.error('Failed writing error status to blob store:', storeError);
+      }
     }
   })();
 };
