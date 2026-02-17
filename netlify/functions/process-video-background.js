@@ -1,22 +1,16 @@
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-const speech = require('@google-cloud/speech');
 const { connectLambda, getStore } = require('@netlify/blobs');
-const fs = require('fs');
-const path = require('path');
-const { Readable } = require('stream');
-
-const resolvedFfmpegPath = process.env.FFMPEG_PATH || ffmpegPath;
-if (!resolvedFfmpegPath || !fs.existsSync(resolvedFfmpegPath)) {
-  console.error('FFmpeg binary not found. Resolved path:', resolvedFfmpegPath);
-  console.error('Tip: In Netlify, keep ffmpeg-static as external_node_modules so __dirname points to node_modules.');
-} else {
-  console.log('Using ffmpeg binary at:', resolvedFfmpegPath);
-}
-
-ffmpeg.setFfmpegPath(resolvedFfmpegPath);
+// NOTE: Keep this file's top-level requires minimal.
+// Google Apps Script (UrlFetch) often triggers a 504 "Inactivity Timeout" if the
+// server doesn't send a response quickly enough. Heavy requires (ffmpeg-static,
+// google-cloud libs) can make cold starts exceed that.
 
 exports.handler = (event, context, callback) => {
+  // Don't keep the response waiting for the event loop.
+  // (We respond immediately and continue work in the background.)
+  if (context) {
+    context.callbackWaitsForEmptyEventLoop = false;
+  }
+
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -71,6 +65,23 @@ exports.handler = (event, context, callback) => {
 
   // Continue processing in the background (Netlify background function)
   (async () => {
+    const fs = require('fs');
+    const path = require('path');
+
+    // Heavy dependencies are loaded lazily to keep cold start fast.
+    const ffmpeg = require('fluent-ffmpeg');
+    const ffmpegPath = require('ffmpeg-static');
+
+    const resolvedFfmpegPath = process.env.FFMPEG_PATH || ffmpegPath;
+    if (!resolvedFfmpegPath || !fs.existsSync(resolvedFfmpegPath)) {
+      console.error('FFmpeg binary not found. Resolved path:', resolvedFfmpegPath);
+      console.error('Tip: In Netlify, keep ffmpeg-static as external_node_modules so __dirname points to node_modules.');
+    } else {
+      console.log('Using ffmpeg binary at:', resolvedFfmpegPath);
+    }
+
+    ffmpeg.setFfmpegPath(resolvedFfmpegPath);
+
     await store.setJSON(jobId, {
       status: 'processing',
       jobId,
@@ -90,10 +101,10 @@ exports.handler = (event, context, callback) => {
         fs.mkdirSync(screenshotsDir, { recursive: true });
       }
 
-      await downloadVideo(videoUrl, videoPath);
-      const screenshots = await extractScreenshots(videoPath, screenshotsDir, sensitivity);
-      await extractAudio(videoPath, audioPath);
-      const transcript = await transcribeAudio(audioPath);
+      await downloadVideo(videoUrl, videoPath, { fs, Readable: require('stream').Readable });
+      const screenshots = await extractScreenshots(ffmpeg, videoPath, screenshotsDir, sensitivity, { fs, path });
+      await extractAudio(ffmpeg, videoPath, audioPath);
+      const transcript = await transcribeAudio(audioPath, { fs });
 
       const screenshotData = screenshots.map(file => {
         const filePath = path.join(screenshotsDir, file);
@@ -121,7 +132,7 @@ exports.handler = (event, context, callback) => {
         result
       });
 
-      cleanupFiles([videoPath, audioPath, screenshotsDir]);
+      cleanupFiles([videoPath, audioPath, screenshotsDir], { fs });
       console.log('Background job finished:', jobId);
     } catch (error) {
       console.error('Background job failed:', jobId, error);
@@ -139,7 +150,7 @@ exports.handler = (event, context, callback) => {
   })();
 };
 
-async function downloadVideo(url, outputPath) {
+async function downloadVideo(url, outputPath, { fs, Readable }) {
   const { pipeline } = require('stream/promises');
 
   const response = await fetch(url, {
@@ -176,7 +187,7 @@ async function downloadVideo(url, outputPath) {
   }
 }
 
-function extractScreenshots(videoPath, outputDir, sensitivity) {
+function extractScreenshots(ffmpeg, videoPath, outputDir, sensitivity, { fs, path }) {
   return new Promise((resolve, reject) => {
     ffmpeg(videoPath)
       .outputOptions([
@@ -195,7 +206,7 @@ function extractScreenshots(videoPath, outputDir, sensitivity) {
   });
 }
 
-function extractAudio(videoPath, audioPath) {
+function extractAudio(ffmpeg, videoPath, audioPath) {
   return new Promise((resolve, reject) => {
     ffmpeg(videoPath)
       .outputOptions([
@@ -211,9 +222,10 @@ function extractAudio(videoPath, audioPath) {
   });
 }
 
-async function transcribeAudio(audioPath) {
+async function transcribeAudio(audioPath, { fs }) {
   try {
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      const speech = require('@google-cloud/speech');
       const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
       const client = new speech.SpeechClient({ credentials });
 
@@ -275,7 +287,7 @@ function formatTimestamp(seconds) {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-function cleanupFiles(pathsToDelete) {
+function cleanupFiles(pathsToDelete, { fs }) {
   pathsToDelete.forEach(p => {
     try {
       if (fs.existsSync(p)) {
