@@ -52,10 +52,6 @@ exports.handler = (event, context, callback) => {
 
   const jobId = `${driveFileId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-  // Persist job state in Netlify Blobs
-  connectLambda(event);
-  const store = getStore('video-processor-jobs');
-
   // Respond immediately (prevents 504 / inactivity timeouts)
   callback(null, {
     statusCode: 202,
@@ -65,6 +61,10 @@ exports.handler = (event, context, callback) => {
 
   // Continue processing in the background (Netlify background function)
   (async () => {
+    // Initialize Netlify Blobs after the response has been sent.
+    connectLambda(event);
+    const store = getStore('video-processor-jobs');
+
     const fs = require('fs');
     const path = require('path');
 
