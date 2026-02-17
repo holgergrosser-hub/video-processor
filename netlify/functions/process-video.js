@@ -6,7 +6,15 @@ const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
 
-ffmpeg.setFfmpegPath(ffmpegPath);
+const resolvedFfmpegPath = process.env.FFMPEG_PATH || ffmpegPath;
+if (!resolvedFfmpegPath || !fs.existsSync(resolvedFfmpegPath)) {
+  console.error('FFmpeg binary not found. Resolved path:', resolvedFfmpegPath);
+  console.error('Tip: In Netlify, keep ffmpeg-static as external_node_modules so __dirname points to node_modules.');
+} else {
+  console.log('Using ffmpeg binary at:', resolvedFfmpegPath);
+}
+
+ffmpeg.setFfmpegPath(resolvedFfmpegPath);
 
 exports.handler = async (event, context) => {
   // CORS Headers
